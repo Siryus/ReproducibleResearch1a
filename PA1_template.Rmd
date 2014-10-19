@@ -1,0 +1,198 @@
+Reproducible research of Activity analisys
+==========================================
+
+## 0. Preparation to analisys
+
+First, before we will start our analisys,  we need to adjust our work environment:
+* attach neede libraries
+* set working directory
+```{r, echo=TRUE, results='hide'}
+library(lubridate)
+library(tidyr)
+library(plyr)
+library(dplyr)
+library(knitr)
+```
+
+## 1. Loading and preprocessing the data
+Loading the data it self:
+```{r, echo=TRUE}
+setwd("C:\\Documents\\Data analysis\\Projects\\ReproducibleResearch_1")
+dat <- read.csv("activity.csv", stringsAsFactors = FALSE, header = TRUE)
+```
+
+Lets make our data more suitable for our analisys. Just a few minor transofmation needed. 
+First convert column "date" into correct format:
+```{r, echo=TRUE}
+dat <- mutate(dat, date = ymd(date))
+```
+
+
+##2. What is mean total number of steps taken per day?
+First thing - lets transform our dataset, and leave only needed information. 
+So NA will be deleted and just columns Date and Steps remain:
+```{r, echo=TRUE}
+dat2 <- filter(dat, !is.na(dat$steps))
+dat2 <- dat2[,c("date", "steps")]
+```
+
+To calculate average number of step per day we have to devide dataset into groups 
+per each day:
+```{r, echo=TRUE}
+dat2 <- group_by(dat2, date)
+```
+
+Now we can calculate total amount of steps for each date:
+```{r, echo=TRUE}
+dat2 <- summarize(dat2, sum(steps))
+names(dat2) <- c("date", "steps")
+```
+
+Now it's time to build required histogram:
+```{r, echo=TRUE}
+hist(x = dat2$steps,
+     breaks = 20,
+     main = "Mean number of steps per date",
+     xlab = "Number of steps",
+     ylab = "Frequency")
+```
+
+Another two things will be usefull to know is median and mean number of steps taken per day:
+```{r, echo=TRUE}
+mean(dat2$steps)
+median(dat2$steps)
+```
+
+
+
+##3. What is the average daily activity pattern?
+Again, we will remove NA from the dataset and leave only needed variables:
+```{r, echo=TRUE}
+dat3 <- filter(dat, !is.na(dat$steps))
+dat3 <- dat3[,c("interval", "steps")]
+```
+
+Now we have to count mean of steps per each time interval:
+```{r, echo=TRUE}
+dat3 <- group_by(dat3, interval)
+dat3 <- summarize(dat3, mean(steps))
+names(dat3) <- c("interval", "steps")
+```
+
+
+Data is transformed properly, now we can get a plot:
+```{r, echo=TRUE}
+plot(x=dat3$interval,
+     y=dat3$steps,
+     type="l",
+     main="Average daily activity",
+     xlab="Time",
+     ylab="Mean steps")
+```
+
+Let's get 5-minute interval, which contains the maximum number of stepson average 
+across all the days in the dataset:
+```{r, echo=TRUE}
+dat3[which.max(dat3$steps),]
+```
+
+
+##4. Inputing missing values
+Let's count how many missing values do we have in our datasets:
+```{r, echo=TRUE}
+dat4 <- dat[is.na(dat$steps),] 
+length(dat4[,1])
+```
+
+In order to have complete dataset without missing values, let's calculate median of 
+steps per each time interval and put this values intp places where they are missing.
+So first we calculate medians of steps per each time interval:
+```{r, echo=TRUE}
+med_steps <- filter(dat, !is.na(dat$steps))
+med_steps <- med_steps[,c("interval", "steps")]
+med_steps <- group_by(med_steps, interval)
+med_steps <- summarize(med_steps, median(steps))
+names(med_steps) <- c("interval", "steps")
+```
+
+Now we can merge initial dataset with median into one dataset:
+```{r, echo=TRUE}
+dat4 <- merge(dat, med_steps, by.x = "interval", by.y = "interval")
+```
+
+In the Variable Steps, where the values are missing we will put our medians:
+```{r, echo=TRUE}
+dat4[is.na(dat4$steps.x),"steps.x"] <- dat4[is.na(dat4$steps.x),"steps.y"]
+dat4 <- arrange(dat4, date)
+dat4$steps.y <- NULL 
+names(dat4) <- c("interval","steps","date")
+```
+
+Time to make histogram:
+```{r, echo=TRUE}
+dat4_hist <- dat4[,c("date", "steps")]
+dat4_hist <- group_by(dat4_hist, date)
+dat4_hist <- summarize(dat4_hist, sum(steps))
+names(dat4_hist) <- c("date", "steps")
+hist(dat4_hist$steps,
+     breaks = 20,
+     main = "Mean number of steps per date",
+     xlab = "Number of steps",
+     ylab = "Frequency")
+```
+
+And compare mean and median with the previous results:
+
+```{r, echo=TRUE}
+mean(dat4_hist$steps)
+median(dat4_hist$steps)
+```
+
+##5. Are there differences in activity patterns between weekdays and weekends?
+
+In order to compare activity during working days and weekends we will add new
+variable. If the weekday is Saturday or Sunday - we will concider this as weekends. 
+Also we have to check the names iof weekday in my native  language:
+```{r, echo=TRUE}
+dat5 <- mutate(dat4, weekday = weekdays(date, 1))
+dat5$daytype <- ifelse(dat5$weekday == 'бс' | dat5$weekday == 'Эф' | 
+                         dat5$weekday == 'Sat' | dat5$weekday == 'Sun', "weekend", "weekday")
+``` 
+
+Finally we can prepare data for plotting. Let's calculate daily activity per
+time interval for weekdays, and then separately for weekend.
+
+```{r, echo=TRUE}
+dat5_weekday <- filter(dat5, daytype=="weekday")
+dat5_weekday <- group_by(dat5_weekday, interval)
+dat5_weekday <- summarize(dat5_weekday, mean(steps))
+names(dat5_weekday) <- c("interval", "steps")
+
+dat5_weekend <- filter(dat5, daytype=="weekend")
+dat5_weekend <- group_by(dat5_weekend, interval)
+dat5_weekend <- summarize(dat5_weekend, mean(steps))
+names(dat5_weekend) <- c("interval", "steps")
+
+```
+
+Now we can plot two prepared datasets:
+```{r, echo=TRUE}
+plot(x = dat5_weekday$interval,
+     y = dat5_weekday$steps,
+     type = "l",
+     main = "Average daily activity",
+     xlab = "Time",
+     ylab = "Mean steps",
+     col = "red")
+
+points(x = dat5_weekend$interval,
+     y = dat5_weekend$steps,
+     type = "l",
+     col = "blue")
+
+legend("topright",
+       lty = 1,
+       legend = c("Weekday", "Weekend"),
+       col = c("red", "blue"))
+``````
+
